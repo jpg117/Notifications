@@ -3,16 +3,19 @@ package modak.challenge;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 public class NotificationServiceImpl implements NotificationService {
-    private Gateway gateway;
-    private Cache<String, Cache<String, Integer>> rateLimits;
+    private final Gateway gateway;
+    private final Cache<String, Cache<String, Integer>> rateLimits;
+    private final Logger logger;
 
     public NotificationServiceImpl(Gateway gateway) {
         this.gateway = gateway;
         rateLimits = CacheBuilder.newBuilder()
                 .expireAfterWrite(1, TimeUnit.DAYS) // Expire limits after 1 day
                 .build();
+        logger = Logger.getLogger(this.getClass().getName());
     }
 
     @Override
@@ -27,13 +30,13 @@ public class NotificationServiceImpl implements NotificationService {
         synchronized (recipientCache) {
             Integer sentMessages = recipientCache.getIfPresent(userId);
             if (sentMessages == null) {
-                recipientCache.put(userId, 1);
-                gateway.send(userId, message);
-            } else if (sentMessages < getMaxFrequency(type)) {
+                sentMessages = 0;
+            }
+            if (sentMessages < getMaxFrequency(type)) {
                 recipientCache.put(userId, sentMessages + 1);
                 gateway.send(userId, message);
             } else {
-                throw new RuntimeException("Rate limit exceeded");
+                logger.warning ("Rate limit exceeded for user " + userId + ", and type " + type);
             }
         }
     }
